@@ -1,0 +1,34 @@
+# Fires the Agentic Testing Gate pipeline on every push to main - a
+# post-merge re-verification before promoting further. Same caveat as
+# pull-request.yaml about Harness's trigger schema: verify via the UI
+# wizard if this doesn't import cleanly.
+trigger:
+  name: Push to main
+  identifier: push_to_main
+  enabled: true
+  orgIdentifier: <+input>
+  projectIdentifier: <+input>
+  pipelineIdentifier: pricing_service_agentic_testing_gate
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: Push
+        spec:
+          connectorRef: <+input>
+          autoAbortPreviousExecutions: true
+          payloadConditions:
+            - key: <+trigger.payload.ref>
+              operator: Equals
+              value: refs/heads/main
+  inputYaml: |
+    pipeline:
+      identifier: pricing_service_agentic_testing_gate
+      properties:
+        ci:
+          codebase:
+            build:
+              type: branch
+              spec:
+                branch: main

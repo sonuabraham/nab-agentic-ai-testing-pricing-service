@@ -1,0 +1,43 @@
+# Fires the Agentic Testing Gate pipeline on PR open/reopen/sync against
+# main. Fill in orgIdentifier/projectIdentifier/connectorRef.
+#
+# NOTE: Harness's trigger YAML schema has shifted across versions - if
+# importing this directly doesn't work, the more reliable path is: create
+# the trigger once via Harness's UI wizard (Pipeline -> Triggers -> Add
+# Trigger -> Webhook -> GitHub -> Pull Request), then compare/replace this
+# file with what it generates.
+trigger:
+  name: PR to main
+  identifier: pr_to_main
+  enabled: true
+  orgIdentifier: <+input>
+  projectIdentifier: <+input>
+  pipelineIdentifier: pricing_service_agentic_testing_gate
+  source:
+    type: Webhook
+    spec:
+      type: Github
+      spec:
+        type: PullRequest
+        spec:
+          connectorRef: <+input>
+          autoAbortPreviousExecutions: true
+          payloadConditions:
+            - key: targetBranch
+              operator: Equals
+              value: main
+          headerConditions: []
+          actions:
+            - Open
+            - Reopen
+            - Synchronize
+  inputYaml: |
+    pipeline:
+      identifier: pricing_service_agentic_testing_gate
+      properties:
+        ci:
+          codebase:
+            build:
+              type: PR
+              spec:
+                number: <+trigger.prNumber>
