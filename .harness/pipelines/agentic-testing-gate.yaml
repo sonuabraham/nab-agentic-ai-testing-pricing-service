@@ -75,6 +75,12 @@ pipeline:
         name: Agentic Testing Gate
         identifier: agentic_testing_gate
         type: CI
+        # Runs regardless of the Unit Tests stage's outcome - this is a
+        # separate, complementary check (dependency-aware agentic testing
+        # against the deployed pipeline), not a follow-on step that should
+        # be skipped just because basic unit tests already failed.
+        when:
+          pipelineStatus: All
         spec:
           cloneCodebase: true
           platform:
