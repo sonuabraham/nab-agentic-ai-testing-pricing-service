@@ -1,0 +1,32 @@
+openapi: 3.0.0
+info:
+  title: pricing-service
+  version: "1.0.0"
+paths:
+  /quotes:
+    post:
+      summary: Get a price quote for an order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: number
+      responses:
+        "200":
+          description: quote
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [discountPct, total]
+                properties:
+                  discountPct:
+                    type: number
+                  total:
+                    type: number
+                  currency:
+                    type: string
