@@ -17,13 +17,13 @@
 pipeline:
   name: pricing-service - Agentic Testing Gate
   identifier: pricing_service_agentic_testing_gate
-  projectIdentifier: <+input>
-  orgIdentifier: <+input>
+  projectIdentifier: nabagentictesting
+  orgIdentifier: default
   tags: {}
   properties:
     ci:
       codebase:
-        connectorRef: <+input>
+        connectorRef: nabagentictesting
         repoName: nab-agentic-ai-testing-pricing-service
         build: <+input>
         depth: 0 # full history - the gate needs to diff against a base commit/branch
@@ -32,7 +32,7 @@ pipeline:
     - name: agentApiEndpoint
       type: String
       description: "nab-agentic-testing's deployed API endpoint - `terraform output -raw api_endpoint`"
-      value: <+input>
+      value: https://auijyiqn10.execute-api.ap-southeast-2.amazonaws.com/v1
     - name: awsRegion
       type: String
       value: ap-southeast-2
