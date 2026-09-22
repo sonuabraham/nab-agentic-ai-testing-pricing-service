@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+# Without this, pytest's default "prepend" import mode only adds tests/
+# itself to sys.path (since tests/ has no __init__.py), not the repo root -
+# `from src.pricing.rules import ...` then fails with ModuleNotFoundError.
+# Explicit pythonpath works the same regardless of how pytest is invoked
+# (bare `pytest`, `python3 -m pytest`, an IDE's test runner, ...).
+pythonpath = ["."]
