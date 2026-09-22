@@ -9,7 +9,7 @@ diff alone can never catch.
 from __future__ import annotations
 
 LARGE_ORDER_THRESHOLD = 100
-DISCOUNT_PCT_LARGE_ORDER = 0.10
+DISCOUNT_PCT_LARGE_ORDER = 0.05
 DISCOUNT_PCT_STANDARD = 0.0
 
 
