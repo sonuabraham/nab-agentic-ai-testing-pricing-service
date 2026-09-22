@@ -6,10 +6,13 @@ real Harness CI/CD run against a real GitHub repo, rather than the
 fixture-based local demo.
 
 ```
-src/api/openapi.yaml   - the API contract
-src/pricing/rules.py   - the business logic (discount calculation)
-src/api/app.py         - a minimal FastAPI service implementing the contract
-tests/test_rules.py    - unit tests for the business logic
+src/api/openapi.yaml         - the API contract
+src/pricing/rules.py         - the business logic (discount calculation)
+src/api/app.py                - a minimal FastAPI service implementing the contract
+tests/test_rules.py           - unit tests for the business logic
+scripts/run_agentic_gate.sh   - diffs a PR/push, calls the deployed agentic-testing API, polls, gates
+.harness/pipelines/           - the Harness CI pipeline (unit tests + the agentic-testing gate)
+.harness/triggers/            - PR and push-to-main triggers for that pipeline
 ```
 
 ## Why these two files specifically
@@ -54,9 +57,42 @@ uvicorn src.api.app:app --reload   # serves POST /quotes on :8000
 
 ## Wiring to Harness
 
-This repo doesn't carry its own agentic-testing gate pipeline - that lives
-in nab-agentic-testing's `.harness/` directory (or is added here once you
-point a Harness pipeline's codebase connector at this repo). See
-`nab-agentic-testing/docs/harness-integration.md` for how a Harness stage
-extracts this repo's before/after `openapi.yaml` and changed-files list from
-the PR diff and calls the deployed nab-agentic-testing API with them.
+The gate pipeline lives in this repo (`.harness/pipelines/agentic-testing-gate.yaml`)
+and calls nab-agentic-testing's **deployed** API - as opposed to
+nab-agentic-testing's own fixture-based simulation pipeline, which needs no
+AWS account at all (see `nab-agentic-testing/docs/harness-simulation-pipeline.md`).
+
+One-time setup:
+
+1. **Deploy nab-agentic-testing** if you haven't (`docs/deploying-to-aws.md`
+   in that repo), with `enable_agentcore = true`.
+2. From `nab-agentic-testing/infra/environments/dev`, get two Terraform
+   outputs:
+   ```bash
+   terraform output -raw api_endpoint          # -> agentApiEndpoint pipeline variable
+   terraform output -raw harness_invoker_user  # -> the IAM user to key below
+   ```
+3. Generate an access key for that user (it can only call
+   `execute-api:Invoke` on this one API - nothing else):
+   ```bash
+   aws iam create-access-key --user-name <harness_invoker_user output>
+   ```
+   Store the `AccessKeyId`/`SecretAccessKey` as two Harness secrets named
+   `pricing_service_harness_invoker_access_key_id` and
+   `pricing_service_harness_invoker_secret_access_key` (or edit the
+   `<+secrets.getValue(...)>` references in the pipeline YAML to match
+   whatever you name them).
+4. Create a Harness **GitHub connector** for this repo
+   (`nab-agentic-ai-testing-pricing-service`).
+5. Import `.harness/pipelines/agentic-testing-gate.yaml` into Harness
+   (Pipelines -> Create Pipeline -> Import From Git), filling in every
+   `<+input>` (org/project identifiers, the GitHub connector, the build
+   spec, and the `agentApiEndpoint` pipeline variable from step 2).
+6. Import the two triggers under `.harness/triggers/` the same way, or
+   recreate them via Harness's trigger wizard if the YAML doesn't import
+   cleanly (Harness's trigger schema has shifted across versions - see the
+   comment at the top of each trigger file).
+
+After that: open a PR touching `src/api/openapi.yaml` and/or
+`src/pricing/rules.py` (see "Changes to try" above) and watch the Agentic
+Testing Gate stage call the real deployed pipeline.
