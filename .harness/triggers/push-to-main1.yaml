@@ -1,0 +1,14 @@
+inputSet:
+  name: PR1
+  identifier: PR1
+  orgIdentifier: default
+  projectIdentifier: nabagentictesting
+  pipeline:
+    identifier: pricing_service_agentic_testing_gate
+    properties:
+      ci:
+        codebase:
+          build:
+            type: branch
+            spec:
+              branch: <+trigger.branch>
