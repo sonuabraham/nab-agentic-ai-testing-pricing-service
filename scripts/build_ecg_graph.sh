@@ -36,9 +36,13 @@ trap 'rm -rf "$WORKDIR"' EXIT
 # useful message, not after the build. Prints shape only, never values.
 echo "==> Checking AWS credentials"
 KEY="${AWS_ACCESS_KEY_ID:-}" SECRET="${AWS_SECRET_ACCESS_KEY:-}" TOKEN="${AWS_SESSION_TOKEN:-}"
-echo "    access key id: prefix=${KEY:0:4} length=${#KEY} (expect AKIA/ASIA, 20)"
-echo "    secret key: length=${#SECRET} (expect 40)"
-echo "    session token: length=${#TOKEN} (0 = not set; required for ASIA keys)"
+# fp = first 8 hex chars of the value's sha256 - compare against a local run of
+#   for v in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do printf '%s' "${!v}" | sha256sum | cut -c1-8; done
+# to tell which Harness secret doesn't match the credentials you exported.
+fp() { printf '%s' "$1" | sha256sum | cut -c1-8; }
+echo "    access key id: prefix=${KEY:0:4} length=${#KEY} fp=$(fp "$KEY") (expect AKIA/ASIA, 20)"
+echo "    secret key: length=${#SECRET} fp=$(fp "$SECRET") (expect 40)"
+echo "    session token: length=${#TOKEN} fp=$(fp "$TOKEN") (0 = not set; required for ASIA keys)"
 for var in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
   case "${!var:-}" in
     *[[:space:]=\"\']*) echo "    WARNING: ${var} contains whitespace, '=' or quotes - paste only the value, without 'export ${var}='" >&2 ;;
