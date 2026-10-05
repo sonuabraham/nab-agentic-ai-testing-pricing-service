@@ -22,6 +22,21 @@ pipeline:
     - name: serviceName
       type: String
       value: pricing-service
+    - name: ecgRepoUrl
+      type: String
+      description: Repo holding the `ecg` package used to build the content graph
+      value: https://github.com/sonuabraham/test-graph.git
+    - name: ecgRepoRef
+      type: String
+      description: Branch, tag or commit of ecgRepoUrl to build with
+      value: main
+    - name: ecgS3Bucket
+      type: String
+      description: S3 bucket the ECG graph is uploaded to
+      value: <+input>
+    - name: ecgS3Prefix
+      type: String
+      value: ecg-graphs
   stages:
     - stage:
         name: Unit Tests
@@ -52,6 +67,46 @@ pipeline:
                       spec:
                         paths:
                           - unit-tests-junit.xml
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: Ignore
+    - stage:
+        name: Build ECG Graph
+        identifier: build_ecg_graph
+        type: CI
+        when:
+          pipelineStatus: All
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Build and upload ECG graph
+                  identifier: build_and_upload_ecg_graph
+                  spec:
+                    shell: Sh
+                    envVariables:
+                      ECG_REPO_URL: <+pipeline.variables.ecgRepoUrl>
+                      ECG_REPO_REF: <+pipeline.variables.ecgRepoRef>
+                      ECG_OUTPUT_DIR: ecg-output
+                      ECG_S3_BUCKET: <+pipeline.variables.ecgS3Bucket>
+                      ECG_S3_PREFIX: <+pipeline.variables.ecgS3Prefix>
+                      SERVICE_NAME: <+pipeline.variables.serviceName>
+                      COMMIT_SHA: <+codebase.commitSha>
+                      AWS_REGION: <+pipeline.variables.awsRegion>
+                      AWS_ACCESS_KEY_ID: <+secrets.getValue("pricing_service_harness_invoker_access_key_id")>
+                      AWS_SECRET_ACCESS_KEY: <+secrets.getValue("pricing_service_harness_invoker_secret_access_key")>
+                    command: bash scripts/build_ecg_graph.sh
         failureStrategies:
           - onFailure:
               errors:
