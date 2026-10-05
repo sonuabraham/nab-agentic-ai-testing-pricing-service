@@ -13,14 +13,37 @@
 #   TARGET_BRANCH         - PR base branch (only meaningful when BUILD_TYPE=PR)
 #   SOURCE_BRANCH         - pushed branch (only meaningful when BUILD_TYPE=branch)
 #   COMMIT_SHA            - commit under test
-#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY - the harness_invoker IAM user's key
-#     (scoped to execute-api:Invoke on this API only - see
-#     infra/environments/dev/main.tf's aws_iam_user.harness_invoker in the
-#     nab-agentic-testing repo)
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (/ AWS_SESSION_TOKEN) - base
+#     credentials for an identity in the nab-agentic-testing account
+#   HARNESS_INVOKER_ROLE_ARN - optional; if set, the base credentials are
+#     used to assume this role (scoped to execute-api:Invoke on this API only
+#     - see infra/environments/dev/main.tf's aws_iam_role.harness_invoker in
+#     the nab-agentic-testing repo) and the calls are signed as the role
 set -euo pipefail
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
+
+if [ -n "${HARNESS_INVOKER_ROLE_ARN:-}" ]; then
+  echo "==> Assuming ${HARNESS_INVOKER_ROLE_ARN}"
+  CREDS="$(aws sts assume-role \
+    --role-arn "$HARNESS_INVOKER_ROLE_ARN" \
+    --role-session-name "agentic-gate-${COMMIT_SHA:0:12}" \
+    --query Credentials --output json)"
+  AWS_ACCESS_KEY_ID="$(echo "$CREDS" | jq -r .AccessKeyId)"
+  AWS_SECRET_ACCESS_KEY="$(echo "$CREDS" | jq -r .SecretAccessKey)"
+  AWS_SESSION_TOKEN="$(echo "$CREDS" | jq -r .SessionToken)"
+fi
+
+# Temporary credentials (assumed role, SSO) must send their session token
+# alongside the SigV4 signature or API Gateway rejects the call with 403.
+SIGV4_ARGS=(
+  --aws-sigv4 "aws:amz:${AWS_REGION}:execute-api"
+  --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}"
+)
+if [ -n "${AWS_SESSION_TOKEN:-}" ]; then
+  SIGV4_ARGS+=(-H "x-amz-security-token: ${AWS_SESSION_TOKEN}")
+fi
 
 echo "==> Determining base ref (BUILD_TYPE=${BUILD_TYPE})"
 if [ "$BUILD_TYPE" = "PR" ]; then
@@ -80,8 +103,7 @@ jq -n \
 
 echo "==> Starting a test run"
 START_RESPONSE="$(curl -sS -X POST "${AGENT_API_ENDPOINT%/}/test-runs" \
-  --aws-sigv4 "aws:amz:${AWS_REGION}:execute-api" \
-  --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+  "${SIGV4_ARGS[@]}" \
   -H "Content-Type: application/json" \
   -d @"${WORKDIR}/payload.json")"
 echo "response: ${START_RESPONSE}"
@@ -96,8 +118,7 @@ echo "runId: ${RUN_ID}"
 echo "==> Polling for a verdict"
 for _ in $(seq 1 60); do
   POLL_RESPONSE="$(curl -sS "${AGENT_API_ENDPOINT%/}/test-runs/${RUN_ID}" \
-    --aws-sigv4 "aws:amz:${AWS_REGION}:execute-api" \
-    --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}")"
+    "${SIGV4_ARGS[@]}")"
   STATUS="$(echo "$POLL_RESPONSE" | jq -r '.status // empty')"
   echo "status: ${STATUS:-<none>}"
   case "$STATUS" in
