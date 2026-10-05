@@ -22,13 +22,13 @@ pipeline:
     - name: serviceName
       type: String
       value: pricing-service
-    - name: ecgRepoUrl
+    - name: ecgRepoName
       type: String
-      description: Repo holding the `ecg` package used to build the content graph
-      value: https://github.com/sonuabraham/test-graph.git
-    - name: ecgRepoRef
+      description: Repo (under the nabagentictesting connector's account) holding the `ecg` package used to build the content graph
+      value: test-graph
+    - name: ecgRepoBranch
       type: String
-      description: Branch, tag or commit of ecgRepoUrl to build with
+      description: Branch of ecgRepoName to build with
       value: main
     - name: ecgS3Bucket
       type: String
@@ -87,8 +87,24 @@ pipeline:
           runtime:
             type: Cloud
             spec: {}
+          # Outside /harness so the ecg tool's own source isn't scanned into
+          # this repo's graph; shared so the Run step can see the clone.
+          sharedPaths:
+            - /ecg-tool
           execution:
             steps:
+              - step:
+                  type: GitClone
+                  name: Clone ecg tool repo
+                  identifier: clone_ecg_tool
+                  spec:
+                    connectorRef: nabagentictesting
+                    repoName: <+pipeline.variables.ecgRepoName>
+                    cloneDirectory: /ecg-tool
+                    build:
+                      type: branch
+                      spec:
+                        branch: <+pipeline.variables.ecgRepoBranch>
               - step:
                   type: Run
                   name: Build and upload ECG graph
@@ -96,8 +112,7 @@ pipeline:
                   spec:
                     shell: Sh
                     envVariables:
-                      ECG_REPO_URL: <+pipeline.variables.ecgRepoUrl>
-                      ECG_REPO_REF: <+pipeline.variables.ecgRepoRef>
+                      ECG_TOOL_DIR: /ecg-tool
                       ECG_OUTPUT_DIR: ecg-output
                       ECG_S3_BUCKET: <+pipeline.variables.ecgS3Bucket>
                       ECG_S3_PREFIX: <+pipeline.variables.ecgS3Prefix>

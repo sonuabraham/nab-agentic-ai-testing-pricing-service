@@ -4,8 +4,12 @@
 # uploads it to S3 (see .harness/pipelines/agentic-testing-gate.yaml).
 #
 # Env vars (set by the Harness pipeline step):
-#   ECG_REPO_URL      - git URL of the repo holding the `ecg` package
-#   ECG_REPO_REF      - branch / tag / commit of that repo to use (default: main)
+#   ECG_TOOL_DIR      - existing checkout of the repo holding the `ecg` package
+#                       (Harness clones it with a GitClone step, since the repo
+#                       is private and needs the GitHub connector's credentials)
+#   ECG_REPO_URL      - only if ECG_TOOL_DIR is unset: git URL to clone instead
+#                       (e.g. when running locally with your own git credentials)
+#   ECG_REPO_REF      - branch / tag / commit of ECG_REPO_URL (default: main)
 #   ECG_OUTPUT_DIR    - local output dir (default: ecg-output)
 #   ECG_S3_BUCKET     - bucket to upload the graph to
 #   ECG_S3_PREFIX     - key prefix (default: ecg-graphs)
@@ -18,11 +22,9 @@
 # mirrors the same files to .../$SERVICE_NAME/latest/.
 set -euo pipefail
 
-: "${ECG_REPO_URL:?ECG_REPO_URL must be set}"
 : "${ECG_S3_BUCKET:?ECG_S3_BUCKET must be set (pipeline variable ecgS3Bucket)}"
 : "${SERVICE_NAME:?SERVICE_NAME must be set}"
 : "${COMMIT_SHA:?COMMIT_SHA must be set}"
-ECG_REPO_REF="${ECG_REPO_REF:-main}"
 ECG_OUTPUT_DIR="${ECG_OUTPUT_DIR:-ecg-output}"
 ECG_S3_PREFIX="${ECG_S3_PREFIX:-ecg-graphs}"
 
@@ -30,16 +32,24 @@ REPO_ROOT="$(pwd)"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
-echo "==> Cloning ${ECG_REPO_URL} @ ${ECG_REPO_REF}"
-git clone --quiet "$ECG_REPO_URL" "$WORKDIR/ecg-tool"
-git -C "$WORKDIR/ecg-tool" checkout --quiet "$ECG_REPO_REF"
+if [ -n "${ECG_TOOL_DIR:-}" ]; then
+  [ -d "$ECG_TOOL_DIR/ecg" ] || { echo "ECG_TOOL_DIR=${ECG_TOOL_DIR} has no ecg/ package" >&2; exit 1; }
+  echo "==> Using ecg tool checkout at ${ECG_TOOL_DIR} ($(git -C "$ECG_TOOL_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown))"
+else
+  : "${ECG_REPO_URL:?set ECG_TOOL_DIR or ECG_REPO_URL}"
+  ECG_REPO_REF="${ECG_REPO_REF:-main}"
+  echo "==> Cloning ${ECG_REPO_URL} @ ${ECG_REPO_REF}"
+  ECG_TOOL_DIR="$WORKDIR/ecg-tool"
+  git clone --quiet "$ECG_REPO_URL" "$ECG_TOOL_DIR"
+  git -C "$ECG_TOOL_DIR" checkout --quiet "$ECG_REPO_REF"
+fi
 
 echo "==> Installing ecg dependencies"
 python3 -m pip install --quiet --upgrade pip
-python3 -m pip install --quiet -r "$WORKDIR/ecg-tool/requirements-server.txt"
+python3 -m pip install --quiet -r "$ECG_TOOL_DIR/requirements-server.txt"
 
 echo "==> Building ECG graph for ${SERVICE_NAME} @ ${COMMIT_SHA}"
-PYTHONPATH="$WORKDIR/ecg-tool${PYTHONPATH:+:$PYTHONPATH}" \
+PYTHONPATH="$ECG_TOOL_DIR${PYTHONPATH:+:$PYTHONPATH}" \
   python3 "$REPO_ROOT/scripts/build_ecg_graph.py" "$REPO_ROOT" "$REPO_ROOT/$ECG_OUTPUT_DIR"
 ls -l "$REPO_ROOT/$ECG_OUTPUT_DIR"
 
