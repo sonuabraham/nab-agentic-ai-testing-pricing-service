@@ -33,7 +33,7 @@ pipeline:
     - name: ecgS3Bucket
       type: String
       description: S3 bucket the ECG graph is uploaded to
-      value: <+input>
+      value: nab-agentic-testing-ecg-artifacts
     - name: ecgS3Prefix
       type: String
       value: ecg-graphs
