@@ -61,13 +61,25 @@ else
   git -C "$ECG_TOOL_DIR" checkout --quiet "$ECG_REPO_REF"
 fi
 
+# test-graph's requirements-server.txt pins versions (e.g. numpy 2.4.x) that
+# need Python >= 3.11, but the Harness Cloud image ships 3.10 - so build a
+# 3.12 venv with uv, which fetches that interpreter itself.
+ECG_PYTHON_VERSION="${ECG_PYTHON_VERSION:-3.12}"
+export UV_CACHE_DIR="$WORKDIR/uv-cache" UV_PYTHON_INSTALL_DIR="$WORKDIR/uv-python"
+echo "==> Creating Python ${ECG_PYTHON_VERSION} venv for ecg"
+if ! command -v uv >/dev/null 2>&1; then
+  python3 -m pip install --quiet --disable-pip-version-check --target "$WORKDIR/uv-bin" uv
+  export PATH="$WORKDIR/uv-bin/bin:$PATH"
+fi
+uv venv --quiet --python "$ECG_PYTHON_VERSION" "$WORKDIR/venv"
+VENV_PY="$WORKDIR/venv/bin/python"
+
 echo "==> Installing ecg dependencies"
-python3 -m pip install --quiet --upgrade pip
-python3 -m pip install --quiet -r "$ECG_TOOL_DIR/requirements-server.txt"
+uv pip install --quiet --python "$VENV_PY" -r "$ECG_TOOL_DIR/requirements-server.txt"
 
 echo "==> Building ECG graph for ${SERVICE_NAME} @ ${COMMIT_SHA}"
 PYTHONPATH="$ECG_TOOL_DIR${PYTHONPATH:+:$PYTHONPATH}" \
-  python3 "$REPO_ROOT/scripts/build_ecg_graph.py" "$REPO_ROOT" "$REPO_ROOT/$ECG_OUTPUT_DIR"
+  "$VENV_PY" "$REPO_ROOT/scripts/build_ecg_graph.py" "$REPO_ROOT" "$REPO_ROOT/$ECG_OUTPUT_DIR"
 ls -l "$REPO_ROOT/$ECG_OUTPUT_DIR"
 
 S3_BASE="s3://${ECG_S3_BUCKET}/${ECG_S3_PREFIX}/${SERVICE_NAME}"
