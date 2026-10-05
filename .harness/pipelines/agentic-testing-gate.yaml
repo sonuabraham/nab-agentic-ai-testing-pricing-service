@@ -119,6 +119,7 @@ pipeline:
                       AWS_REGION: <+pipeline.variables.awsRegion>
                       AWS_ACCESS_KEY_ID: <+secrets.getValue("pricing_service_harness_invoker_access_key_id")>
                       AWS_SECRET_ACCESS_KEY: <+secrets.getValue("pricing_service_harness_invoker_secret_access_key")>
+                      AWS_SESSION_TOKEN: <+secrets.getValue("pricing_service_harness_invoker_session_token")>
                     command: bash scripts/build_ecg_graph.sh
         failureStrategies:
           - onFailure:
@@ -160,4 +161,5 @@ pipeline:
                       HARNESS_INVOKER_ROLE_ARN: arn:aws:iam::294427322916:role/nab-agentic-testing-dev-harness-invoker
                       AWS_ACCESS_KEY_ID: <+secrets.getValue("pricing_service_harness_invoker_access_key_id")>
                       AWS_SECRET_ACCESS_KEY: <+secrets.getValue("pricing_service_harness_invoker_secret_access_key")>
+                      AWS_SESSION_TOKEN: <+secrets.getValue("pricing_service_harness_invoker_session_token")>
                     command: bash scripts/run_agentic_gate.sh
