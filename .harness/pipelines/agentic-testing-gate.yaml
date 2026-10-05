@@ -15,13 +15,28 @@ pipeline:
     - name: agentApiEndpoint
       type: String
       description: nab-agentic-testing's deployed API endpoint - `terraform output -raw api_endpoint`
-      value: https://auijyiqn10.execute-api.ap-southeast-2.amazonaws.com/v1
+      value: https://ihr2wavty0.execute-api.ap-southeast-2.amazonaws.com/v1
     - name: awsRegion
       type: String
       value: ap-southeast-2
+    - name: awsRoleArn
+      type: String
+      description: Role assumed via Harness OIDC (trusts the Harness OIDC provider in 294427322916) - scoped to invoking the agent API and writing ECG graphs to S3
+      value: arn:aws:iam::294427322916:role/nab-agentic-testing-dev-harness-invoker
     - name: serviceName
       type: String
       value: pricing-service
+    - name: ecgRepoBranch
+      type: String
+      description: Branch of sonuabraham/test-graph (the `ecg` package, cloned via the test_graph connector) to build with
+      value: main
+    - name: ecgS3Bucket
+      type: String
+      description: S3 bucket the ECG graph is uploaded to
+      value: nab-agentic-testing-ecg-artifacts
+    - name: ecgS3Prefix
+      type: String
+      value: ecg-graphs
   stages:
     - stage:
         name: Unit Tests
@@ -59,6 +74,72 @@ pipeline:
               action:
                 type: Ignore
     - stage:
+        name: Build ECG Graph
+        identifier: build_ecg_graph
+        type: CI
+        when:
+          pipelineStatus: All
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: GitClone
+                  name: Clone ecg tool repo
+                  identifier: clone_ecg_tool
+                  spec:
+                    # Repo-type GitHub connector for
+                    # https://github.com/sonuabraham/test-graph - nabagentictesting
+                    # is scoped to this repo only, so it can't clone test-graph.
+                    connectorRef: test_graph
+                    # Inside the shared workspace; build_ecg_graph.sh moves it
+                    # out before building so it isn't scanned into the graph.
+                    cloneDirectory: /harness/.ecg-tool
+                    build:
+                      type: branch
+                      spec:
+                        branch: <+pipeline.variables.ecgRepoBranch>
+              - step:
+                  type: Plugin
+                  name: Assume AWS role with OIDC
+                  identifier: assume_role_with_oidc
+                  spec:
+                    image: plugins/aws-oidc
+                    settings:
+                      iamRoleArn: <+pipeline.variables.awsRoleArn>
+                      roleSessionName: harness-pricing-service-ecg
+                      duration: 3600
+              - step:
+                  type: Run
+                  name: Build and upload ECG graph
+                  identifier: build_and_upload_ecg_graph
+                  spec:
+                    shell: Sh
+                    envVariables:
+                      ECG_TOOL_DIR: /harness/.ecg-tool
+                      ECG_OUTPUT_DIR: ecg-output
+                      ECG_S3_BUCKET: <+pipeline.variables.ecgS3Bucket>
+                      ECG_S3_PREFIX: <+pipeline.variables.ecgS3Prefix>
+                      SERVICE_NAME: <+pipeline.variables.serviceName>
+                      COMMIT_SHA: <+codebase.commitSha>
+                      AWS_REGION: <+pipeline.variables.awsRegion>
+                      AWS_ACCESS_KEY_ID: <+steps.assume_role_with_oidc.output.outputVariables.AWS_ACCESS_KEY_ID>
+                      AWS_SECRET_ACCESS_KEY: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SECRET_ACCESS_KEY>
+                      AWS_SESSION_TOKEN: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SESSION_TOKEN>
+                    command: bash scripts/build_ecg_graph.sh
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: Ignore
+    - stage:
         name: Agentic Testing Gate
         identifier: agentic_testing_gate
         type: CI
@@ -75,6 +156,16 @@ pipeline:
           execution:
             steps:
               - step:
+                  type: Plugin
+                  name: Assume AWS role with OIDC
+                  identifier: assume_role_with_oidc
+                  spec:
+                    image: plugins/aws-oidc
+                    settings:
+                      iamRoleArn: <+pipeline.variables.awsRoleArn>
+                      roleSessionName: harness-pricing-service-gate
+                      duration: 3600
+              - step:
                   type: Run
                   name: Run agentic testing gate
                   identifier: run_agentic_gate
@@ -89,6 +180,9 @@ pipeline:
                       TARGET_BRANCH: <+codebase.targetBranch>
                       SOURCE_BRANCH: <+codebase.branch>
                       COMMIT_SHA: <+codebase.commitSha>
-                      AWS_ACCESS_KEY_ID: <+secrets.getValue("pricing_service_harness_invoker_access_key_id")>
-                      AWS_SECRET_ACCESS_KEY: <+secrets.getValue("pricing_service_harness_invoker_secret_access_key")>
+                      # Already the invoker role's credentials (via OIDC), so no
+                      # HARNESS_INVOKER_ROLE_ARN - the script would try to re-assume it.
+                      AWS_ACCESS_KEY_ID: <+steps.assume_role_with_oidc.output.outputVariables.AWS_ACCESS_KEY_ID>
+                      AWS_SECRET_ACCESS_KEY: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SECRET_ACCESS_KEY>
+                      AWS_SESSION_TOKEN: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SESSION_TOKEN>
                     command: bash scripts/run_agentic_gate.sh

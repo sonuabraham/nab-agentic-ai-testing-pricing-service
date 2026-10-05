@@ -30,3 +30,5 @@ paths:
                     type: number
                   currency:
                     type: string
+                  taxAmount:
+                    type: number
