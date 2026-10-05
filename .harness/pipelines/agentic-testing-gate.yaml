@@ -89,6 +89,7 @@ pipeline:
                       TARGET_BRANCH: <+codebase.targetBranch>
                       SOURCE_BRANCH: <+codebase.branch>
                       COMMIT_SHA: <+codebase.commitSha>
+                      HARNESS_INVOKER_ROLE_ARN: arn:aws:iam::294427322916:role/nab-agentic-testing-dev-harness-invoker
                       AWS_ACCESS_KEY_ID: <+secrets.getValue("pricing_service_harness_invoker_access_key_id")>
                       AWS_SECRET_ACCESS_KEY: <+secrets.getValue("pricing_service_harness_invoker_secret_access_key")>
                     command: bash scripts/run_agentic_gate.sh
