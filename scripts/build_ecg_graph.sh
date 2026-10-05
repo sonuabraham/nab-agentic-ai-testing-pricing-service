@@ -32,6 +32,26 @@ REPO_ROOT="$(pwd)"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
+# Check the AWS credentials up front so a bad secret fails in seconds with a
+# useful message, not after the build. Prints shape only, never values.
+echo "==> Checking AWS credentials"
+KEY="${AWS_ACCESS_KEY_ID:-}" SECRET="${AWS_SECRET_ACCESS_KEY:-}" TOKEN="${AWS_SESSION_TOKEN:-}"
+echo "    access key id: prefix=${KEY:0:4} length=${#KEY} (expect AKIA/ASIA, 20)"
+echo "    secret key: length=${#SECRET} (expect 40)"
+echo "    session token: length=${#TOKEN} (0 = not set; required for ASIA keys)"
+for var in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
+  case "${!var:-}" in
+    *[[:space:]=\"\']*) echo "    WARNING: ${var} contains whitespace, '=' or quotes - paste only the value, without 'export ${var}='" >&2 ;;
+  esac
+done
+case "$KEY" in
+  ASIA*) [ -n "${AWS_SESSION_TOKEN:-}" ] || echo "    WARNING: ASIA (temporary) key without AWS_SESSION_TOKEN - AWS will reject it" >&2 ;;
+esac
+if ! aws sts get-caller-identity --region "$AWS_REGION" --query Arn --output text; then
+  echo "AWS rejected these credentials - update the pricing_service_harness_invoker_* secrets (InvalidClientTokenId = wrong/mangled key, ExpiredToken = refresh them)" >&2
+  exit 1
+fi
+
 if [ -n "${ECG_TOOL_DIR:-}" ]; then
   # The checkout root is whichever dir holds ecg/__init__.py - normally
   # ECG_TOOL_DIR itself, but allow for the clone landing one level deeper.
