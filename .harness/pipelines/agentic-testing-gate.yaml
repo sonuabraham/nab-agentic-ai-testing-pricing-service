@@ -22,13 +22,9 @@ pipeline:
     - name: serviceName
       type: String
       value: pricing-service
-    - name: ecgRepoName
-      type: String
-      description: Repo (under the nabagentictesting connector's account) holding the `ecg` package used to build the content graph
-      value: test-graph
     - name: ecgRepoBranch
       type: String
-      description: Branch of ecgRepoName to build with
+      description: Branch of sonuabraham/test-graph (the `ecg` package, cloned via the test_graph connector) to build with
       value: main
     - name: ecgS3Bucket
       type: String
@@ -94,8 +90,10 @@ pipeline:
                   name: Clone ecg tool repo
                   identifier: clone_ecg_tool
                   spec:
-                    connectorRef: nabagentictesting
-                    repoName: <+pipeline.variables.ecgRepoName>
+                    # Repo-type GitHub connector for
+                    # https://github.com/sonuabraham/test-graph - nabagentictesting
+                    # is scoped to this repo only, so it can't clone test-graph.
+                    connectorRef: test_graph
                     # Inside the shared workspace; build_ecg_graph.sh moves it
                     # out before building so it isn't scanned into the graph.
                     cloneDirectory: /harness/.ecg-tool
