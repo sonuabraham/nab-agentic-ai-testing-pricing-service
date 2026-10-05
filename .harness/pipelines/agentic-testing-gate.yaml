@@ -19,6 +19,10 @@ pipeline:
     - name: awsRegion
       type: String
       value: ap-southeast-2
+    - name: awsRoleArn
+      type: String
+      description: Role assumed via Harness OIDC (trusts the Harness OIDC provider in 294427322916) - scoped to invoking the agent API and writing ECG graphs to S3
+      value: arn:aws:iam::294427322916:role/nab-agentic-testing-dev-harness-invoker
     - name: serviceName
       type: String
       value: pricing-service
@@ -102,6 +106,16 @@ pipeline:
                       spec:
                         branch: <+pipeline.variables.ecgRepoBranch>
               - step:
+                  type: Plugin
+                  name: Assume AWS role with OIDC
+                  identifier: assume_role_with_oidc
+                  spec:
+                    image: plugins/aws-oidc
+                    settings:
+                      iamRoleArn: <+pipeline.variables.awsRoleArn>
+                      roleSessionName: harness-pricing-service-ecg
+                      duration: 3600
+              - step:
                   type: Run
                   name: Build and upload ECG graph
                   identifier: build_and_upload_ecg_graph
@@ -115,9 +129,9 @@ pipeline:
                       SERVICE_NAME: <+pipeline.variables.serviceName>
                       COMMIT_SHA: <+codebase.commitSha>
                       AWS_REGION: <+pipeline.variables.awsRegion>
-                      AWS_ACCESS_KEY_ID: <+secrets.getValue("pricing_service_harness_invoker_access_key_id")>
-                      AWS_SECRET_ACCESS_KEY: <+secrets.getValue("pricing_service_harness_invoker_secret_access_key")>
-                      AWS_SESSION_TOKEN: <+secrets.getValue("pricing_service_harness_invoker_session_token")>
+                      AWS_ACCESS_KEY_ID: <+steps.assume_role_with_oidc.output.outputVariables.AWS_ACCESS_KEY_ID>
+                      AWS_SECRET_ACCESS_KEY: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SECRET_ACCESS_KEY>
+                      AWS_SESSION_TOKEN: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SESSION_TOKEN>
                     command: bash scripts/build_ecg_graph.sh
         failureStrategies:
           - onFailure:
@@ -142,6 +156,16 @@ pipeline:
           execution:
             steps:
               - step:
+                  type: Plugin
+                  name: Assume AWS role with OIDC
+                  identifier: assume_role_with_oidc
+                  spec:
+                    image: plugins/aws-oidc
+                    settings:
+                      iamRoleArn: <+pipeline.variables.awsRoleArn>
+                      roleSessionName: harness-pricing-service-gate
+                      duration: 3600
+              - step:
                   type: Run
                   name: Run agentic testing gate
                   identifier: run_agentic_gate
@@ -156,8 +180,9 @@ pipeline:
                       TARGET_BRANCH: <+codebase.targetBranch>
                       SOURCE_BRANCH: <+codebase.branch>
                       COMMIT_SHA: <+codebase.commitSha>
-                      HARNESS_INVOKER_ROLE_ARN: arn:aws:iam::294427322916:role/nab-agentic-testing-dev-harness-invoker
-                      AWS_ACCESS_KEY_ID: <+secrets.getValue("pricing_service_harness_invoker_access_key_id")>
-                      AWS_SECRET_ACCESS_KEY: <+secrets.getValue("pricing_service_harness_invoker_secret_access_key")>
-                      AWS_SESSION_TOKEN: <+secrets.getValue("pricing_service_harness_invoker_session_token")>
+                      # Already the invoker role's credentials (via OIDC), so no
+                      # HARNESS_INVOKER_ROLE_ARN - the script would try to re-assume it.
+                      AWS_ACCESS_KEY_ID: <+steps.assume_role_with_oidc.output.outputVariables.AWS_ACCESS_KEY_ID>
+                      AWS_SECRET_ACCESS_KEY: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SECRET_ACCESS_KEY>
+                      AWS_SESSION_TOKEN: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SESSION_TOKEN>
                     command: bash scripts/run_agentic_gate.sh

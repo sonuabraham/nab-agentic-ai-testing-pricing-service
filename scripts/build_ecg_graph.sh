@@ -16,7 +16,8 @@
 #   SERVICE_NAME      - logical service name, used in the S3 key
 #   COMMIT_SHA        - commit the graph was built from, used in the S3 key
 #   AWS_REGION, AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (/ AWS_SESSION_TOKEN)
-#     - credentials allowed s3:PutObject on the bucket/prefix
+#     - credentials allowed s3:PutObject on the bucket/prefix (in Harness, the
+#       invoker role's temporary credentials from the aws-oidc plugin step)
 #
 # Uploads to s3://$ECG_S3_BUCKET/$ECG_S3_PREFIX/$SERVICE_NAME/$COMMIT_SHA/ and
 # mirrors the same files to .../$SERVICE_NAME/latest/.
@@ -52,7 +53,7 @@ case "$KEY" in
   ASIA*) [ -n "${AWS_SESSION_TOKEN:-}" ] || echo "    WARNING: ASIA (temporary) key without AWS_SESSION_TOKEN - AWS will reject it" >&2 ;;
 esac
 if ! aws sts get-caller-identity --region "$AWS_REGION" --query Arn --output text; then
-  echo "AWS rejected these credentials - update the pricing_service_harness_invoker_* secrets (InvalidClientTokenId = wrong/mangled key, ExpiredToken = refresh them)" >&2
+  echo "AWS rejected these credentials - check the assume_role_with_oidc step's output (InvalidClientTokenId = wrong/mangled key, ExpiredToken = refresh them)" >&2
   exit 1
 fi
 
