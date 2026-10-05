@@ -33,8 +33,25 @@ WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
 if [ -n "${ECG_TOOL_DIR:-}" ]; then
-  [ -d "$ECG_TOOL_DIR/ecg" ] || { echo "ECG_TOOL_DIR=${ECG_TOOL_DIR} has no ecg/ package" >&2; exit 1; }
+  # The checkout root is whichever dir holds ecg/__init__.py - normally
+  # ECG_TOOL_DIR itself, but allow for the clone landing one level deeper.
+  INIT="$(find "$ECG_TOOL_DIR" -maxdepth 3 -path '*/ecg/__init__.py' 2>/dev/null | head -1)"
+  if [ -z "$INIT" ]; then
+    echo "No ecg/ package under ECG_TOOL_DIR=${ECG_TOOL_DIR}. Contents:" >&2
+    ls -la "$ECG_TOOL_DIR" >&2 || true
+    echo "Workspace (${REPO_ROOT}):" >&2
+    ls -la "$REPO_ROOT" >&2
+    exit 1
+  fi
+  ECG_TOOL_DIR="$(dirname "$(dirname "$INIT")")"
   echo "==> Using ecg tool checkout at ${ECG_TOOL_DIR} ($(git -C "$ECG_TOOL_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown))"
+  # A checkout inside this repo would be scanned into its graph - move it out.
+  case "$(cd "$ECG_TOOL_DIR" && pwd)/" in
+    "$REPO_ROOT"/*)
+      mv "$ECG_TOOL_DIR" "$WORKDIR/ecg-tool"
+      ECG_TOOL_DIR="$WORKDIR/ecg-tool"
+      ;;
+  esac
 else
   : "${ECG_REPO_URL:?set ECG_TOOL_DIR or ECG_REPO_URL}"
   ECG_REPO_REF="${ECG_REPO_REF:-main}"

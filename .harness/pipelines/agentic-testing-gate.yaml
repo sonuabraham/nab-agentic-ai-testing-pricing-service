@@ -87,10 +87,6 @@ pipeline:
           runtime:
             type: Cloud
             spec: {}
-          # Outside /harness so the ecg tool's own source isn't scanned into
-          # this repo's graph; shared so the Run step can see the clone.
-          sharedPaths:
-            - /ecg-tool
           execution:
             steps:
               - step:
@@ -100,7 +96,9 @@ pipeline:
                   spec:
                     connectorRef: nabagentictesting
                     repoName: <+pipeline.variables.ecgRepoName>
-                    cloneDirectory: /ecg-tool
+                    # Inside the shared workspace; build_ecg_graph.sh moves it
+                    # out before building so it isn't scanned into the graph.
+                    cloneDirectory: /harness/.ecg-tool
                     build:
                       type: branch
                       spec:
@@ -112,7 +110,7 @@ pipeline:
                   spec:
                     shell: Sh
                     envVariables:
-                      ECG_TOOL_DIR: /ecg-tool
+                      ECG_TOOL_DIR: /harness/.ecg-tool
                       ECG_OUTPUT_DIR: ecg-output
                       ECG_S3_BUCKET: <+pipeline.variables.ecgS3Bucket>
                       ECG_S3_PREFIX: <+pipeline.variables.ecgS3Prefix>
