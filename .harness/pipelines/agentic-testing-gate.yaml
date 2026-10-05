@@ -15,7 +15,7 @@ pipeline:
     - name: agentApiEndpoint
       type: String
       description: nab-agentic-testing's deployed API endpoint - `terraform output -raw api_endpoint`
-      value: https://auijyiqn10.execute-api.ap-southeast-2.amazonaws.com/v1
+      value: https://ihr2wavty0.execute-api.ap-southeast-2.amazonaws.com/v1
     - name: awsRegion
       type: String
       value: ap-southeast-2
